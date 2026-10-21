@@ -1,0 +1,321 @@
+// =======================================================
+// VETCARE CLINIC DATABASE SCHEMA (DBML)
+// Hệ Thống Quản Lý Phòng Khám & Đặt Lịch Dịch Vụ Thú Y
+// =======================================================
+
+Project VetCare {
+  database_type: 'MySQL'
+  Note: '''
+    # Cơ sở dữ liệu VetCare Clinic
+    Quản lý người dùng, hồ sơ thú cưng, bác sĩ thú y, danh mục dịch vụ y tế,
+    lịch hẹn khám, bệnh án điện tử, thanh toán VNPay và tư vấn AI.
+  '''
+}
+
+// =======================================================
+// 1. USERS & AUTHENTICATION
+// =======================================================
+
+Table users {
+  id bigint [pk, increment]
+  username varchar(100) [not null, unique, note: 'Tên tài khoản']
+  email varchar(150) [not null, unique, note: 'Email / Gmail']
+  password_hash varchar(255) [not null, note: 'Mật khẩu mã hóa BCrypt']
+  status varchar(30) [not null, default: 'ACTIVE', note: 'ACTIVE, INACTIVE, BLOCKED']
+  created_at datetime [default: `now()`]
+  updated_at datetime [default: `now()`]
+
+  indexes {
+    username [unique]
+    email [unique]
+    status
+  }
+}
+
+Table roles {
+  id bigint [pk, increment]
+  name varchar(50) [not null, unique, note: 'CUSTOMER, USER, VET, OWNER, ADMIN']
+  description varchar(255)
+  created_at datetime [default: `now()`]
+}
+
+Table permissions {
+  id bigint [pk, increment]
+  name varchar(100) [not null, unique, note: 'Tên quyền hạn chi tiết']
+  description varchar(255)
+  created_at datetime [default: `now()`]
+}
+
+Table user_roles {
+  id bigint [pk, increment]
+  user_id bigint [not null]
+  role_id bigint [not null]
+  created_at datetime [default: `now()`]
+
+  indexes {
+    (user_id, role_id) [unique]
+  }
+}
+
+Table role_permissions {
+  id bigint [pk, increment]
+  role_id bigint [not null]
+  permission_id bigint [not null]
+  created_at datetime [default: `now()`]
+
+  indexes {
+    (role_id, permission_id) [unique]
+  }
+}
+
+Table user_profiles {
+  id bigint [pk, increment]
+  user_id bigint [not null, unique]
+  full_name varchar(150) [note: 'Họ và tên chủ nuôi']
+  phone varchar(20) [note: 'Số điện thoại liên hệ']
+  gender varchar(20) [note: 'Nam, Nữ, Khác']
+  date_of_birth date
+  avatar_url varchar(500)
+  address varchar(255)
+  city varchar(100)
+  created_at datetime [default: `now()`]
+  updated_at datetime [default: `now()`]
+
+  indexes {
+    user_id [unique]
+    phone
+  }
+}
+
+// =======================================================
+// 2. PETS MANAGEMENT (HỒ SƠ THÚ CƯNG)
+// =======================================================
+
+Table pets {
+  id bigint [pk, increment]
+  user_id bigint [not null, note: 'Khách hàng / Chủ nuôi sở hữu']
+  name varchar(100) [not null, note: 'Tên thú cưng (Bắp, Miu, Lu...)']
+  species varchar(50) [not null, note: 'Chó, Mèo, Thỏ, Chim, Hamster, Khác']
+  breed varchar(100) [note: 'Giống loài (Corgi, Poodle, Mèo Anh lông ngắn...)']
+  age int [note: 'Độ tuổi (năm hoặc tháng)']
+  weight double [note: 'Cân nặng (kg)']
+  gender varchar(20) [note: 'Đực, Cái']
+  notes text [note: 'Tiền sử bệnh, dị ứng thức ăn, thói quen']
+  image_url varchar(500)
+  created_at datetime [default: `now()`]
+  updated_at datetime [default: `now()`]
+
+  indexes {
+    user_id
+    species
+    breed
+  }
+}
+
+// =======================================================
+// 3. VETERINARIANS (ĐỘI NGŨ BÁC SĨ THÚ Y)
+// =======================================================
+
+Table doctors {
+  id bigint [pk, increment]
+  user_id bigint [note: 'Tài khoản người dùng liên kết (nếu có)']
+  full_name varchar(150) [not null, note: 'Họ tên Bác sĩ thú y']
+  specialization varchar(150) [note: 'Chuyên khoa: Ngoại khoa, Da liễu, Siêu âm, Tiêm phòng']
+  license_number varchar(50) [note: 'Số chứng chỉ hành nghề thú y']
+  experience_years int [default: 1, note: 'Số năm kinh nghiệm công tác']
+  bio text [note: 'Tiểu sử, bằng cấp, quá trình tu nghiệp']
+  phone varchar(20)
+  email varchar(100)
+  avatar_url varchar(500)
+  is_available boolean [default: true, note: 'Trạng thái sẵn sàng nhận ca khám']
+  rating double [default: 5.0, note: 'Điểm đánh giá trung bình từ khách hàng']
+  created_at datetime [default: `now()`]
+
+  indexes {
+    user_id
+    specialization
+    is_available
+  }
+}
+
+// =======================================================
+// 4. VET SERVICES (DANH MỤC DỊCH VỤ THÚ Y)
+// =======================================================
+
+Table vet_services {
+  id bigint [pk, increment]
+  name varchar(150) [not null, note: 'Tên dịch vụ']
+  description text [note: 'Mô tả chi tiết và quy trình khám']
+  price decimal(12,2) [not null, note: 'Đơn giá dịch vụ (VNĐ)']
+  duration_minutes int [default: 30, note: 'Thời lượng dự kiến (phút)']
+  category varchar(50) [not null, note: 'EXAMINATION, VACCINATION, SURGERY, SPA_GROOMING, DENTAL']
+  image_url varchar(500)
+  status varchar(20) [not null, default: 'ACTIVE', note: 'ACTIVE, INACTIVE']
+  created_at datetime [default: `now()`]
+  updated_at datetime [default: `now()`]
+
+  indexes {
+    category
+    status
+    price
+  }
+}
+
+// =======================================================
+// 5. APPOINTMENTS (LỊCH HẸN KHÁM BỆNH)
+// =======================================================
+
+Table appointments {
+  id bigint [pk, increment]
+  appointment_code varchar(50) [not null, unique, note: 'Mã lịch hẹn: VET-YYYYMMDD-XXXXX']
+  user_id bigint [not null, note: 'Khách hàng đặt lịch']
+  pet_id bigint [not null, note: 'Bé thú cưng được khám']
+  doctor_id bigint [note: 'Bác sĩ phụ trách ca khám']
+  service_id bigint [not null, note: 'Gói dịch vụ đã chọn']
+  appointment_date date [not null, note: 'Ngày hẹn khám']
+  appointment_time time [not null, note: 'Giờ hẹn khám']
+  status varchar(30) [not null, default: 'PENDING', note: 'PENDING, CONFIRMED, COMPLETED, CANCELLED']
+  notes text [note: 'Triệu chứng ban đầu hoặc ghi chú của chủ thú cưng']
+  total_amount decimal(12,2) [not null, note: 'Tổng chi phí ca khám']
+  payment_status varchar(20) [not null, default: 'UNPAID', note: 'UNPAID, PAID, REFUNDED']
+  created_at datetime [default: `now()`]
+  updated_at datetime [default: `now()`]
+
+  indexes {
+    appointment_code [unique]
+    user_id
+    pet_id
+    doctor_id
+    service_id
+    appointment_date
+    status
+    payment_status
+  }
+}
+
+// =======================================================
+// 6. MEDICAL RECORDS (HỒ SƠ BỆNH ÁN & ĐƠN THUỐC ĐIỆN TỬ)
+// =======================================================
+
+Table medical_records {
+  id bigint [pk, increment]
+  appointment_id bigint [not null, unique, note: 'Ca khám tương ứng']
+  pet_id bigint [not null, note: 'Thú cưng được khám']
+  doctor_id bigint [not null, note: 'Bác sĩ lập hồ sơ bệnh án']
+  symptoms text [note: 'Triệu chứng lâm sàng ghi nhận']
+  diagnosis varchar(255) [not null, note: 'Chẩn đoán bệnh']
+  treatment text [note: 'Phác đồ và phương pháp điều trị']
+  prescription text [note: 'Đơn thuốc và hướng dẫn sử dụng chi tiết']
+  doctor_notes text [note: 'Lời dặn dò chế độ dinh dưỡng, chăm sóc tại nhà']
+  re_examination_date date [note: 'Ngày hẹn tái khám (nếu có)']
+  created_at datetime [default: `now()`]
+
+  indexes {
+    appointment_id [unique]
+    pet_id
+    doctor_id
+    re_examination_date
+  }
+}
+
+// =======================================================
+// 7. PAYMENTS (GIAO DỊCH THANH TOÁN VNPAY)
+// =======================================================
+
+Table payments {
+  id bigint [pk, increment]
+  appointment_id bigint [not null, note: 'Lịch hẹn cần thanh toán']
+  amount decimal(12,2) [not null, note: 'Số tiền thanh toán']
+  payment_method varchar(30) [not null, default: 'VNPAY', note: 'VNPAY, CASH']
+  transaction_no varchar(100) [note: 'Mã giao dịch từ cổng VNPay (vnp_TransactionNo)']
+  bank_code varchar(50) [note: 'Ngân hàng thực hiện: NCB, VCB, MB, VNPAYQR...']
+  order_info varchar(255) [note: 'Nội dung thanh toán']
+  status varchar(30) [not null, default: 'PENDING', note: 'PENDING, SUCCESS, FAILED']
+  payment_time datetime [default: `now()`]
+
+  indexes {
+    appointment_id
+    transaction_no
+    status
+    payment_time
+  }
+}
+
+// =======================================================
+// 8. REVIEWS & RATINGS (ĐÁNH GIÁ CHẤT LƯỢNG)
+// =======================================================
+
+Table vet_reviews {
+  id bigint [pk, increment]
+  appointment_id bigint [note: 'Lịch hẹn được đánh giá']
+  user_id bigint [not null, note: 'Khách hàng đánh giá']
+  service_id bigint [note: 'Dịch vụ được đánh giá']
+  doctor_id bigint [note: 'Bác sĩ phụ trách được đánh giá']
+  rating int [not null, default: 5, note: 'Số sao từ 1 đến 5']
+  comment text [note: 'Ý kiến phản hồi của chủ nuôi']
+  created_at datetime [default: `now()`]
+
+  indexes {
+    user_id
+    service_id
+    doctor_id
+    rating
+  }
+}
+
+// =======================================================
+// 9. AI CONSULTATION LOGS (LỊCH SỬ TƯ VẤN AI)
+// =======================================================
+
+Table ai_consultation_logs {
+  id bigint [pk, increment]
+  user_id bigint [note: 'Người dùng hỏi (nếu đã đăng nhập)']
+  pet_info varchar(255) [note: 'Thông tin bé cưng kèm theo']
+  prompt text [not null, note: 'Câu hỏi hoặc mô tả triệu chứng của người dùng']
+  response text [not null, note: 'Câu trả lời tư vấn từ Bác sĩ Thú y AI (Gemini)']
+  created_at datetime [default: `now()`]
+
+  indexes {
+    user_id
+    created_at
+  }
+}
+
+// =======================================================
+// RELATIONSHIPS & FOREIGN KEYS
+// =======================================================
+
+// User & Role Relationships
+Ref: user_profiles.user_id - users.id
+Ref: user_roles.user_id > users.id
+Ref: user_roles.role_id > roles.id
+Ref: role_permissions.role_id > roles.id
+Ref: role_permissions.permission_id > permissions.id
+
+// Pet & Doctor Relationships
+Ref: pets.user_id > users.id
+Ref: doctors.user_id - users.id
+
+// Appointment Relationships
+Ref: appointments.user_id > users.id
+Ref: appointments.pet_id > pets.id
+Ref: appointments.doctor_id > doctors.id
+Ref: appointments.service_id > vet_services.id
+
+// Medical Record Relationships
+Ref: medical_records.appointment_id - appointments.id
+Ref: medical_records.pet_id > pets.id
+Ref: medical_records.doctor_id > doctors.id
+
+// Payment Relationships
+Ref: payments.appointment_id > appointments.id
+
+// Review Relationships
+Ref: vet_reviews.appointment_id > appointments.id
+Ref: vet_reviews.user_id > users.id
+Ref: vet_reviews.service_id > vet_services.id
+Ref: vet_reviews.doctor_id > doctors.id
+
+// AI Logs Relationships
+Ref: ai_consultation_logs.user_id > users.id
+
